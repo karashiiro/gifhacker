@@ -1,4 +1,4 @@
-use iced::{widget::button, Alignment, Button, Element, Row, Sandbox, Settings, Text};
+use iced::{image, widget::button, Alignment, Button, Element, Row, Sandbox, Settings, Text};
 
 fn main() -> iced::Result {
     GifProject::run(Settings::default())
@@ -6,7 +6,7 @@ fn main() -> iced::Result {
 
 struct GifProject {
     // A vector of GIF image frames
-    frames: Vec<Vec<u8>>,
+    frames: Vec<image::Handle>,
 
     // The index of the frame being operated on
     current: Option<u32>,

@@ -32,6 +32,7 @@ enum Message {
 #[derive(Debug, Clone)]
 enum Error {
     RequestError,
+    DecodingError,
 }
 
 impl From<reqwest::Error> for Error {
@@ -39,6 +40,14 @@ impl From<reqwest::Error> for Error {
         dbg!(error);
 
         Error::RequestError
+    }
+}
+
+impl From<gif::DecodingError> for Error {
+    fn from(error: gif::DecodingError) -> Error {
+        dbg!(error);
+
+        Error::DecodingError
     }
 }
 
@@ -50,7 +59,7 @@ impl GifProject {
         .await?;
 
         Ok(Self::Editing {
-            frames: vec![project_file],
+            frames: project_file,
             frame_viewer: image::viewer::State::new(),
             current: -1,
             step_forward_button: button::State::default(),
@@ -58,9 +67,22 @@ impl GifProject {
         })
     }
 
-    async fn fetch_image(url: &str) -> Result<image::Handle, reqwest::Error> {
+    async fn fetch_image(url: &str) -> Result<Vec<image::Handle>, Error> {
         let bytes = reqwest::get(url).await?.bytes().await?;
-        Ok(image::Handle::from_memory(bytes.as_ref().to_vec()))
+        let bytes_vec = bytes.to_vec();
+        let reader = std::io::Cursor::new(bytes_vec);
+
+        let mut options = gif::DecodeOptions::new();
+        options.set_color_output(gif::ColorOutput::RGBA);
+
+        let mut decoder = options.read_info(reader)?;
+
+        let mut frames: Vec<image::Handle> = Vec::new();
+        while let Ok(Some(frame)) = decoder.read_next_frame() {
+            frames.push(image::Handle::from_memory(frame.buffer.to_vec()))
+        }
+
+        Ok(frames)
     }
 }
 
@@ -106,6 +128,10 @@ impl Application for GifProject {
                                 .on_press(Message::FrameStepForward),
                         ),
                 )
+                .into(),
+            Self::Errored => Column::new()
+                .padding(20)
+                .push(Text::new("An error has occurred."))
                 .into(),
             _ => Row::new().into(),
         }
@@ -159,7 +185,6 @@ impl Application for GifProject {
             }
             Message::ProjectLoaded(Err(_error)) => {
                 *self = Self::Errored;
-
                 Command::none()
             }
         }
